@@ -52,7 +52,7 @@ def main():
 
     with open('data/sampled_chars.txt', mode='w') as f:
         for char in sorted(all_chars):
-            f.write('{}\n'.format(char))
+            f.write('u{:04x} {}\n'.format(ord(char), char))
 
 
 if __name__ == '__main__':

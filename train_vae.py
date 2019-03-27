@@ -8,16 +8,18 @@ from torchvision.utils import save_image
 
 IMG_WIDTH = 32
 IMG_HEIGHT = 32
+NUM_HIDDEN = 16
+NUM_LAYER1 = 400
 
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
 
-        self.fc1 = nn.Linear(IMG_WIDTH * IMG_HEIGHT, 400)
-        self.fc21 = nn.Linear(400, 20)
-        self.fc22 = nn.Linear(400, 20)
-        self.fc3 = nn.Linear(20, 400)
-        self.fc4 = nn.Linear(400, IMG_WIDTH * IMG_HEIGHT)
+        self.fc1 = nn.Linear(IMG_WIDTH * IMG_HEIGHT, NUM_LAYER1)
+        self.fc21 = nn.Linear(NUM_LAYER1, NUM_HIDDEN)
+        self.fc22 = nn.Linear(NUM_LAYER1, NUM_HIDDEN)
+        self.fc3 = nn.Linear(NUM_HIDDEN, NUM_LAYER1)
+        self.fc4 = nn.Linear(NUM_LAYER1, IMG_WIDTH * IMG_HEIGHT)
 
     def encode(self, x):
         h1 = F.relu(self.fc1(x))
@@ -50,6 +52,26 @@ def loss_function(recon_x, x, mu, logvar):
     kl_distance = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
     return cross_entropy + kl_distance
+
+
+def generate(model, epoch):
+    from torch.distributions.normal import Normal
+    images = []
+    normal = Normal(0., 1.)
+    for x in range(10+1):
+        for y in range(10+1):
+            x_coord = min(max(x / 10., .01), .99)
+            y_coord = min(max(y / 10., .01), .99)
+
+            z = torch.randn(NUM_HIDDEN).unsqueeze(0)
+            # z = torch.zeros(20)
+            # z[0:2] = normal.icdf(torch.tensor([x_coord, y_coord]))
+            recon = model.decode(z)
+            images.append(recon)
+
+    images_joined = torch.cat(images).view(-1, 1, IMG_WIDTH, IMG_HEIGHT)
+    save_image(images_joined.cpu(),
+               'data/reconstruction/generated{:02d}.png'.format(epoch), nrow=11)
 
 
 def main():
@@ -98,22 +120,22 @@ def main():
         print('====> Epoch: {} Average loss: {:.4f}'.format(
               epoch, train_loss / len(train_loader.dataset)))
 
-
         model.eval()
-        test_loss = 0
-        with torch.no_grad():
-            for i, (data, _) in enumerate(train_loader):
-                data = data.to(device)
-                recon_batch, mu, logvar = model(data)
-                test_loss += loss_function(recon_batch, data, mu, logvar).item()
-                if i == 0:
-                    n = min(data.size(0), 8)
-                    comparison = torch.cat([data[:n],
-                                           recon_batch.view(args.batch_size, 1, IMG_WIDTH, IMG_HEIGHT)[:n]])
-                    save_image(comparison.cpu(),
-                             'data/reconstruction/{}.png'.format(epoch), nrow=n)
+
+        generate(model, epoch)
+        # test_loss = 0
+        # with torch.no_grad():
+        #     for i, (data, _) in enumerate(train_loader):
+        #         data = data.to(device)
+        #         recon_batch, mu, logvar = model(data)
+        #         test_loss += loss_function(recon_batch, data, mu, logvar).item()
+        #         if i == 0:
+        #             n = min(data.size(0), 8)
+        #             comparison = torch.cat([data[:n],
+        #                                    recon_batch.view(args.batch_size, 1, IMG_WIDTH, IMG_HEIGHT)[:n]])
+        #             save_image(comparison.cpu(),
+        #                      'data/reconstruction/{}.png'.format(epoch), nrow=n)
 
 
 if __name__ == '__main__':
     main()
-
