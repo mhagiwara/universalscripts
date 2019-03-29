@@ -8,7 +8,7 @@ from torchvision.utils import save_image
 
 IMG_WIDTH = 32
 IMG_HEIGHT = 32
-NUM_HIDDEN = 16
+NUM_HIDDEN = 32
 NUM_LAYER1 = 400
 
 class VAE(nn.Module):
