@@ -8,8 +8,8 @@ from torchvision.utils import save_image
 
 IMG_WIDTH = 32
 IMG_HEIGHT = 32
-NUM_HIDDEN = 32
-NUM_LAYER1 = 400
+NUM_HIDDEN = 16
+NUM_LAYER1 = 512
 
 class VAE(nn.Module):
     def __init__(self):
@@ -64,7 +64,7 @@ def generate(model, epoch):
             y_coord = min(max(y / 10., .01), .99)
 
             z = torch.randn(NUM_HIDDEN).unsqueeze(0)
-            # z = torch.zeros(20)
+            # z = torch.zeros(NUM_HIDDEN)
             # z[0:2] = normal.icdf(torch.tensor([x_coord, y_coord]))
             recon = model.decode(z)
             images.append(recon)
@@ -89,6 +89,7 @@ def main():
 
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+    torch.manual_seed(args.seed)
 
     transform = transforms.Compose([transforms.Grayscale(),
                                     transforms.ToTensor()])
@@ -98,7 +99,7 @@ def main():
     device = torch.device("cuda" if args.cuda else "cpu")
 
     model = VAE().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=2.0e-3)
 
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -121,20 +122,9 @@ def main():
               epoch, train_loss / len(train_loader.dataset)))
 
         model.eval()
-
         generate(model, epoch)
-        # test_loss = 0
-        # with torch.no_grad():
-        #     for i, (data, _) in enumerate(train_loader):
-        #         data = data.to(device)
-        #         recon_batch, mu, logvar = model(data)
-        #         test_loss += loss_function(recon_batch, data, mu, logvar).item()
-        #         if i == 0:
-        #             n = min(data.size(0), 8)
-        #             comparison = torch.cat([data[:n],
-        #                                    recon_batch.view(args.batch_size, 1, IMG_WIDTH, IMG_HEIGHT)[:n]])
-        #             save_image(comparison.cpu(),
-        #                      'data/reconstruction/{}.png'.format(epoch), nrow=n)
+
+    torch.save(model.state_dict(), 'data/model.pt')
 
 
 if __name__ == '__main__':
