@@ -12,35 +12,70 @@ IMG_HEIGHT = 32
 NUM_HIDDEN = 16
 NUM_LAYER1 = 512
 
+
+def normal_init(m, mean, std):
+    if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
+        m.weight.data.normal_(mean, std)
+        m.bias.data.zero_()
+
+
 class Generator(nn.Module):
-    def __init__(self, input_size, n_class):
+    def __init__(self, d=128):
         super(Generator, self).__init__()
+        self.deconv1 = nn.ConvTranspose2d(d, d*8, 4, 1, 0)
+        self.deconv1_bn = nn.BatchNorm2d(d*8)
+        self.deconv2 = nn.ConvTranspose2d(d*8, d*4, 4, 2, 1)
+        self.deconv2_bn = nn.BatchNorm2d(d*4)
+        self.deconv3 = nn.ConvTranspose2d(d*4, d*2, 4, 2, 1)
+        self.deconv3_bn = nn.BatchNorm2d(d*2)
+        self.deconv4 = nn.ConvTranspose2d(d*2, d, 4, 2, 1)
+        self.deconv4_bn = nn.BatchNorm2d(d)
+        self.deconv5 = nn.ConvTranspose2d(d, 1, 4, 2, 1)
 
-        self.fc1 = nn.Linear(input_size, NUM_LAYER1)
-        self.fc2 = nn.Linear(self.fc1.out_features, n_class)
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
 
-    # forward method
     def forward(self, input):
-        x = F.leaky_relu(self.fc1(input), 0.2)
-        x = F.tanh(self.fc2(x))
+        x = F.relu(self.deconv1_bn(self.deconv1(input)))
+        x = F.relu(self.deconv2_bn(self.deconv2(x)))
+        x = F.relu(self.deconv3_bn(self.deconv3(x)))
+        x = F.relu(self.deconv4_bn(self.deconv4(x)))
+        x = F.tanh(self.deconv5(x))
 
         return x
 
 
 class Discriminator(nn.Module):
-    def __init__(self, input_size, n_class):
+    def __init__(self, d=128):
         super(Discriminator, self).__init__()
+        self.conv1 = nn.Conv2d(1, d, 4, 2, 1)
+        self.conv2 = nn.Conv2d(d, d*2, 4, 2, 1)
+        self.conv2_bn = nn.BatchNorm2d(d*2)
+        self.conv3 = nn.Conv2d(d*2, d*4, 4, 2, 1)
+        self.conv3_bn = nn.BatchNorm2d(d*4)
+        self.conv4 = nn.Conv2d(d*4, d*8, 4, 2, 1)
+        self.conv4_bn = nn.BatchNorm2d(d*8)
+        self.conv5 = nn.Conv2d(d*8, 1, 4, 1, 0)
 
-        self.fc1 = nn.Linear(input_size, NUM_LAYER1)
-        self.fc2 = nn.Linear(self.fc1.out_features, n_class)
+    # weight_init
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
 
     # forward method
     def forward(self, input):
-        x = F.leaky_relu(self.fc1(input), 0.2)
-        x = F.sigmoid(self.fc2(x))
+        x = F.leaky_relu(self.conv1(input), 0.2)
+        x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
+        x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
+        x = F.leaky_relu(self.conv4_bn(self.conv4(x)), 0.2)
+        x = F.sigmoid(self.conv5(x))
 
         return x
 
+
+z_fixed = [[torch.randn(NUM_HIDDEN).view(1, NUM_HIDDEN, 1, 1) for y in range(10+1)]
+           for x in range(10+1)]
 
 def generate(generator, epoch):
     from torch.distributions.normal import Normal
@@ -51,13 +86,13 @@ def generate(generator, epoch):
             x_coord = min(max(x / 10., .01), .99)
             y_coord = min(max(y / 10., .01), .99)
 
-            z = torch.randn(NUM_HIDDEN).unsqueeze(0)
+            z = torch.randn(NUM_HIDDEN).view(1, NUM_HIDDEN, 1, 1)
             # z = torch.zeros(NUM_HIDDEN)
             # z[0:2] = normal.icdf(torch.tensor([x_coord, y_coord]))
             recon = generator(z)
             images.append(recon)
 
-    images_joined = torch.cat(images).view(-1, 1, IMG_WIDTH, IMG_HEIGHT)
+    images_joined = torch.cat(images).view(-1, 1, 2 * IMG_WIDTH, 2 * IMG_HEIGHT)
     save_image(images_joined.cpu(),
                'data/reconstruction/generated{:02d}.png'.format(epoch), nrow=11)
 
@@ -79,18 +114,22 @@ def main():
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     torch.manual_seed(args.seed)
 
-    transform = transforms.Compose([transforms.Grayscale(),
+    transform = transforms.Compose([transforms.Scale(64),
+                                    transforms.Grayscale(),
                                     transforms.ToTensor(),
-                                    transforms.Normalize(mean=(0.,), std=(1.,))])
+                                    transforms.Normalize(mean=(.5,), std=(.5,))])
     chars = datasets.folder.ImageFolder('data/', transform=transform)
     train_loader = torch.utils.data.DataLoader(chars, batch_size=args.batch_size, shuffle=True)
 
-    generator = Generator(input_size=NUM_HIDDEN, n_class=IMG_WIDTH * IMG_HEIGHT)
-    discriminator = Discriminator(input_size=IMG_WIDTH * IMG_HEIGHT, n_class=1)
+    generator = Generator(d=NUM_HIDDEN)
+    discriminator = Discriminator(d=NUM_HIDDEN)
 
-    lr = 1.0e-3
-    optim_g = optim.Adam(generator.parameters(), lr=lr)
-    optim_d = optim.Adam(discriminator.parameters(), lr=lr)
+    generator.weight_init(mean=0.0, std=0.02)
+    discriminator.weight_init(mean=0.0, std=0.02)
+
+    lr = 2.0e-3
+    optim_g = optim.Adam(generator.parameters(), lr=lr, betas=(.5, .999))
+    optim_d = optim.Adam(discriminator.parameters(), lr=lr, betas=(.5, .999))
 
     bce_loss = nn.BCELoss()
 
@@ -102,7 +141,6 @@ def main():
             # train discriminator
             discriminator.zero_grad()
 
-            x = x.view(-1, IMG_HEIGHT * IMG_WIDTH)
             batch_size = x.size()[0]
 
             real_target = torch.ones(batch_size)
@@ -111,7 +149,7 @@ def main():
             real_pred = discriminator(x)
             real_loss = bce_loss(real_pred, real_target)
 
-            z = torch.randn((batch_size, NUM_HIDDEN))
+            z = torch.randn((batch_size, NUM_HIDDEN, 1, 1))
             generated = generator(z)
 
             fake_pred = discriminator(generated)
@@ -141,6 +179,8 @@ def main():
             (epoch + 1), args.epochs, torch.mean(torch.tensor(losses_d)), torch.mean(torch.tensor(losses_g))))
 
         generate(generator, epoch)
+
+        torch.save(generator.state_dict(), 'data/generator{:03d}.pt'.format(epoch))
 
 
 if __name__ == '__main__':
