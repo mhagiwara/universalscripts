@@ -1,4 +1,4 @@
-"""A Python script to sample random characters from unicode code blocks."""
+"""A Python script to sample random characters from Universal Dependencies files."""
 
 import numpy as np
 import glob
@@ -9,6 +9,7 @@ CHARS_PER_FILE = 100
 
 
 def gather_ud_files(ud_path):
+    """Given a path to Universal Dependencies directory, returns a list of file paths and names."""
     files = []
     for file_path in glob.glob('{}/*/*.txt'.format(ud_path)):
         file_name = file_path.split('/')[-1]
