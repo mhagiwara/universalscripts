@@ -77,24 +77,19 @@ class Discriminator(nn.Module):
 z_fixed = [[torch.randn(NUM_HIDDEN).view(1, NUM_HIDDEN, 1, 1) for y in range(10+1)]
            for x in range(10+1)]
 
-def generate(generator, epoch):
+def generate_random(generator, epoch):
     from torch.distributions.normal import Normal
     images = []
-    normal = Normal(0., 1.)
     for x in range(10+1):
         for y in range(10+1):
-            x_coord = min(max(x / 10., .01), .99)
-            y_coord = min(max(y / 10., .01), .99)
 
             z = torch.randn(NUM_HIDDEN).view(1, NUM_HIDDEN, 1, 1)
-            # z = torch.zeros(NUM_HIDDEN)
-            # z[0:2] = normal.icdf(torch.tensor([x_coord, y_coord]))
             recon = generator(z)
             images.append(recon)
 
     images_joined = torch.cat(images).view(-1, 1, 2 * IMG_WIDTH, 2 * IMG_HEIGHT)
     save_image(images_joined.cpu(),
-               'data/reconstruction/generated{:02d}.png'.format(epoch), nrow=11)
+               'result/gan/epoch{:03d}.png'.format(epoch), nrow=11)
 
 
 def main():
@@ -134,6 +129,8 @@ def main():
     bce_loss = nn.BCELoss()
 
     for epoch in range(args.epochs):
+        generator.train()
+
         losses_d = []
         losses_g = []
 
@@ -178,9 +175,9 @@ def main():
         print('[%d/%d]: loss_d: %.3f, loss_g: %.3f' % (
             (epoch + 1), args.epochs, torch.mean(torch.tensor(losses_d)), torch.mean(torch.tensor(losses_g))))
 
-        generate(generator, epoch)
+        generate_random(generator, epoch)
 
-        torch.save(generator.state_dict(), 'data/generator{:03d}.pt'.format(epoch))
+        # torch.save(generator.state_dict(), 'data/generator{:03d}.pt'.format(epoch))
 
 
 if __name__ == '__main__':

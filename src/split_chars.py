@@ -1,8 +1,10 @@
+"""Script to split chars into individual files."""
+
 from PIL import Image
 import PIL.ImageOps
 
 def main():
-    image = Image.open('chars.png')
+    image = Image.open('data/chars.png')
     r, g, b, a = image.split()
     image = Image.merge('RGB', (r, g, b))
 
@@ -15,7 +17,7 @@ def main():
             box = (x_offset + x * 48, y_offset + y * 48,
                    x_offset + x * 48 + 32, y_offset + y * 48 + 32)
             region = image.crop(box)
-            region.save('data/chars2/{:02d}{:02d}.png'.format(x, y))
+            region.save('data/chars/{:02d}{:02d}.png'.format(x, y))
 
 if __name__ == '__main__':
     main()

@@ -54,24 +54,19 @@ def loss_function(recon_x, x, mu, logvar):
     return cross_entropy + kl_distance
 
 
-def generate(model, epoch):
+def generate_random(model, epoch):
     from torch.distributions.normal import Normal
     images = []
-    normal = Normal(0., 1.)
     for x in range(10+1):
         for y in range(10+1):
-            x_coord = min(max(x / 10., .01), .99)
-            y_coord = min(max(y / 10., .01), .99)
 
             z = torch.randn(NUM_HIDDEN).unsqueeze(0)
-            # z = torch.zeros(NUM_HIDDEN)
-            # z[0:2] = normal.icdf(torch.tensor([x_coord, y_coord]))
             recon = model.decode(z)
             images.append(recon)
 
     images_joined = torch.cat(images).view(-1, 1, IMG_WIDTH, IMG_HEIGHT)
     save_image(images_joined.cpu(),
-               'data/reconstruction/generated{:02d}.png'.format(epoch), nrow=11)
+               'result/vae/epoch{:03d}.png'.format(epoch), nrow=11)
 
 
 def main():
@@ -122,7 +117,7 @@ def main():
               epoch, train_loss / len(train_loader.dataset)))
 
         model.eval()
-        generate(model, epoch)
+        generate_random(model, epoch)
 
     torch.save(model.state_dict(), 'data/model.pt')
 
