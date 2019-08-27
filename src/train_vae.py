@@ -18,7 +18,7 @@ class Flatten(nn.Module):
 
 class UnFlatten(nn.Module):
     def forward(self, input, size=1024):
-        return input.view(input.size(0), size, 1, 1)
+        return input.view(input.size(0), size // 4, 2, 2)
 
 
 class VAE(nn.Module):
@@ -43,7 +43,7 @@ class VAE(nn.Module):
 
         self.decoder = nn.Sequential(
             UnFlatten(),
-            nn.ConvTranspose2d(h_dim, 128, kernel_size=4, stride=1, padding=0),
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
             nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
@@ -149,7 +149,7 @@ def main():
         model.eval()
         generate_random(model, epoch)
 
-    torch.save(model.state_dict(), 'data/model.pt')
+    torch.save(model.state_dict(), 'result/vae/model.pt')
 
 
 if __name__ == '__main__':
