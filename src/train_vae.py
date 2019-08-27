@@ -8,36 +8,66 @@ from torchvision.utils import save_image
 
 IMG_WIDTH = 32
 IMG_HEIGHT = 32
-NUM_HIDDEN = 16
-NUM_LAYER1 = 512
+NUM_HIDDEN = 32
+
+
+class Flatten(nn.Module):
+    def forward(self, input):
+        return input.view(input.size(0), -1)
+
+
+class UnFlatten(nn.Module):
+    def forward(self, input, size=1024):
+        return input.view(input.size(0), size, 1, 1)
+
 
 class VAE(nn.Module):
-    def __init__(self):
+    def __init__(self, image_channels=3, h_dim=1024, z_dim=32):
         super(VAE, self).__init__()
 
-        self.fc1 = nn.Linear(IMG_WIDTH * IMG_HEIGHT, NUM_LAYER1)
-        self.fc21 = nn.Linear(NUM_LAYER1, NUM_HIDDEN)
-        self.fc22 = nn.Linear(NUM_LAYER1, NUM_HIDDEN)
-        self.fc3 = nn.Linear(NUM_HIDDEN, NUM_LAYER1)
-        self.fc4 = nn.Linear(NUM_LAYER1, IMG_WIDTH * IMG_HEIGHT)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(image_channels, 32, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            Flatten()
+        )
 
-    def encode(self, x):
-        h1 = F.relu(self.fc1(x))
-        return self.fc21(h1), self.fc22(h1)
+        self.fc1 = nn.Linear(h_dim, z_dim)
+        self.fc2 = nn.Linear(h_dim, z_dim)
+        self.fc3 = nn.Linear(z_dim, h_dim)
+
+        self.decoder = nn.Sequential(
+            UnFlatten(),
+            nn.ConvTranspose2d(h_dim, 128, kernel_size=4, stride=1, padding=0),
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(32, image_channels, kernel_size=4, stride=2, padding=1),
+            nn.Sigmoid(),
+        )
 
     def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5*logvar)
+        std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return mu + eps*std
+        return mu + std * eps
 
-    def decode(self, z):
-        h3 = F.relu(self.fc3(z))
-        return torch.sigmoid(self.fc4(h3))
+    def bottleneck(self, h):
+        mu, logvar = self.fc1(h), self.fc2(h)
+        z = self.reparameterize(mu, logvar)
+        return z, mu, logvar
 
     def forward(self, x):
-        mu, logvar = self.encode(x.view(-1, IMG_WIDTH * IMG_HEIGHT))
-        z = self.reparameterize(mu, logvar)
-        return self.decode(z), mu, logvar
+        h = self.encoder(x)
+        z, mu, logvar = self.bottleneck(h)
+        z = self.fc3(z)
+        return self.decoder(z), mu, logvar
 
 
 # Reconstruction + KL divergence losses summed over all elements and batch
@@ -61,7 +91,7 @@ def generate_random(model, epoch):
         for y in range(10+1):
 
             z = torch.randn(NUM_HIDDEN).unsqueeze(0)
-            recon = model.decode(z)
+            recon = model.decoder(model.fc3(z))
             images.append(recon)
 
     images_joined = torch.cat(images).view(-1, 1, IMG_WIDTH, IMG_HEIGHT)
@@ -93,8 +123,8 @@ def main():
 
     device = torch.device("cuda" if args.cuda else "cpu")
 
-    model = VAE().to(device)
-    optimizer = optim.Adam(model.parameters(), lr=2.0e-3)
+    model = VAE(image_channels=1, h_dim=IMG_HEIGHT * IMG_WIDTH, z_dim=NUM_HIDDEN).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     for epoch in range(1, args.epochs + 1):
         model.train()
