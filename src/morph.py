@@ -32,10 +32,10 @@ def morph():
     transform = transforms.Compose([transforms.Grayscale(),
                                     transforms.ToTensor()])
 
-    image1 = load_image('test/traditional_fan.png', transform)
+    image1 = load_image('test/upper_a.png', transform)
     z1, _, _ = model.bottleneck(model.encoder(image1))
 
-    image2 = load_image('test/simplified_fan.png', transform)
+    image2 = load_image('test/lower_a.png', transform)
     z2, _, _ = model.bottleneck(model.encoder(image2))
 
     steps = 10
